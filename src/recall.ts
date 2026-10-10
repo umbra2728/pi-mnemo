@@ -5,6 +5,7 @@ export const GATE = {
   strongCos: 0.55,
   cos: 0.42,
   ftsRank: 5,
+  topFtsCos: 0.38,
   spread: 0.1,
   maxItems: 3,
   maxChars: 1300,
@@ -12,9 +13,10 @@ export const GATE = {
   hintFtsRank: 3,
 };
 
-export function passesGate(h: MemoryHit, cos = GATE.cos, ftsRank = GATE.ftsRank): boolean {
+export function passesGate(h: MemoryHit, cos = GATE.cos, ftsRank = GATE.ftsRank, topFtsCos = GATE.topFtsCos): boolean {
   if (h.cos >= GATE.strongCos) return true;
-  return h.cos >= cos && h.ftsRank !== null && h.ftsRank <= ftsRank;
+  if (h.ftsRank === null) return false;
+  return (h.cos >= cos && h.ftsRank <= ftsRank) || (h.cos >= topFtsCos && h.ftsRank === 1);
 }
 
 export function date(ts: number): string {
@@ -62,5 +64,5 @@ export function renderRecall(hits: MemoryHit[]): string {
 export function errorHint(store: Store, toolName: string, input: unknown, errorText: string, opts: { project: string | null; seen: Set<number> }): MemoryHit | undefined {
   const query = `${toolName} ${JSON.stringify(input ?? {}).slice(0, 300)}\n${errorText.slice(0, 700)}`;
   const hits = store.searchMemories([query], { project: opts.project, limit: 3, excludeIds: opts.seen, kinds: ["pitfall", "procedure", "fact", "decision"] });
-  return hits.find((h) => passesGate(h, GATE.hintCos, GATE.hintFtsRank));
+  return hits.find((h) => passesGate(h, GATE.hintCos, GATE.hintFtsRank, GATE.hintCos));
 }
