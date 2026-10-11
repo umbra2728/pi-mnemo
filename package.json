@@ -3,13 +3,35 @@
   "version": "0.1.0",
   "description": "Token-frugal long-term memory for pi: hybrid FTS + static embeddings, background extraction, auto-recall.",
   "type": "module",
-  "keywords": ["pi-package"],
-  "pi": { "extensions": ["./src/index.ts"] },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "memory",
+    "long-term-memory",
+    "agent"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
   "scripts": {
     "test": "node --experimental-strip-types --no-warnings --test test/*.test.ts",
     "fetch-model": "node scripts/fetch-model.mjs"
   },
   "dependencies": {
     "snowball-stemmers": "0.6.0"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/umbra2728/pi-mnemo.git"
+  },
+  "homepage": "https://github.com/umbra2728/pi-mnemo#readme",
+  "files": [
+    "src/",
+    "scripts/fetch-model.mjs",
+    "README.md",
+    "LICENSE"
+  ]
 }
