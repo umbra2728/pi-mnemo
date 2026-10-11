@@ -8,6 +8,7 @@ import { enqueueBackfill, enqueueEnrichAll, importHermes } from "./importer.ts";
 import { JobRunner } from "./jobs.ts";
 import { projectFor } from "./project.ts";
 import { autoRecall, date, errorHint, formatMemoryLine, renderRecall } from "./recall.ts";
+import { ensureModel, modelReady } from "./model.ts";
 import { KINDS, Store, type Kind } from "./store.ts";
 import { redact } from "./text.ts";
 
@@ -93,6 +94,37 @@ export default function mnemo(pi: ExtensionAPI) {
     runner?.kick();
   };
 
+  let provisioning = false;
+  const provisionModel = (ctx: ExtensionContext) => {
+    if (modelReady(MODEL_DIR)) {
+      safe(() => {
+        const s = getStore();
+        if (!s.embedder) s.attachEmbedder(MODEL_DIR);
+      }, undefined);
+      return;
+    }
+    if (provisioning || (ctx.mode !== "tui" && ctx.mode !== "rpc")) return;
+    provisioning = true;
+    const notify = (text: string) => {
+      try {
+        if (ctx.hasUI) ctx.ui.notify(text, "info");
+      } catch {}
+    };
+    notify("mnemo: downloading the search model (~55 MB) in the background");
+    ensureModel(MODEL_DIR)
+      .then((status) => {
+        if (status !== "downloaded") return;
+        safe(() => getStore().attachEmbedder(MODEL_DIR), undefined);
+        notify("mnemo: search model ready");
+      })
+      .catch((e) => {
+        lastError = `model download: ${(e as Error).message}`;
+      })
+      .finally(() => {
+        provisioning = false;
+      });
+  };
+
   const bindSession = (ctx: ExtensionContext) => {
     sessionId = ctx.sessionManager.getSessionId();
     sessionFile = ctx.sessionManager.getSessionFile();
@@ -102,6 +134,7 @@ export default function mnemo(pi: ExtensionAPI) {
     charsSince = 0;
     toolsSinceHint = HINT_SPACING;
     if (sessionFile) safe(() => getStore().upsertSession({ id: sessionId!, file: sessionFile!, cwd: ctx.cwd, project, startedAt: Date.now() }), undefined);
+    if (!IS_CHILD) provisionModel(ctx);
     runner?.stop();
     runner = undefined;
     if (!IS_CHILD && (ctx.mode === "tui" || ctx.mode === "rpc" || process.env.MNEMO_RUNNER === "1")) {

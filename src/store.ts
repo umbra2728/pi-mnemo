@@ -166,7 +166,7 @@ function rrf(rank: number): number {
 
 export class Store {
   readonly db: DatabaseSyncType;
-  readonly embedder: StaticEmbedder | undefined;
+  embedder: StaticEmbedder | undefined;
   private vecCache: { gen: string; ids: number[]; vecs: Float32Array[]; meta: Map<number, Memory> } | undefined;
   private sessionVecCache: { gen: string; ids: string[]; vecs: Float32Array[] } | undefined;
   private readonly stmts = new Map<string, StatementSync>();
@@ -206,6 +206,34 @@ export class Store {
       this.db.exec("ROLLBACK");
       throw e;
     }
+  }
+
+  attachEmbedder(modelDir: string): boolean {
+    const next = StaticEmbedder.tryLoad(modelDir);
+    if (!next) return false;
+    this.embedder?.close();
+    this.embedder = next;
+    this.reembedMissing();
+    return true;
+  }
+
+  reembedMissing(): number {
+    const embedder = this.embedder;
+    if (!embedder) return 0;
+    const mems = this.stmt("SELECT id, text, tags, ru FROM memories WHERE vec IS NULL").all() as { id: number; text: string; tags: string; ru: string }[];
+    const sessions = this.stmt("SELECT id, title, summary, ru FROM sessions WHERE vec IS NULL AND digested_at IS NOT NULL").all() as {
+      id: string;
+      title: string;
+      summary: string;
+      ru: string;
+    }[];
+    this.tx(() => {
+      for (const m of mems) this.stmt("UPDATE memories SET vec=? WHERE id=?").run(toBlob(embedder.embed(`${m.text}\n${m.tags}\n${m.ru}`)), m.id);
+      for (const s of sessions) this.stmt("UPDATE sessions SET vec=? WHERE id=?").run(toBlob(embedder.embed(`${s.title}\n${s.summary}\n${s.ru}`)), s.id);
+    });
+    if (mems.length) this.bump("mem_gen");
+    if (sessions.length) this.bump("sess_gen");
+    return mems.length + sessions.length;
   }
 
   getKv(key: string): string | undefined {
