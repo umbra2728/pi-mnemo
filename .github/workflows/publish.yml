@@ -18,6 +18,7 @@ jobs:
           node-version: 22
       - run: npm install -g npm@latest
       - run: npm ci
+      - run: npm run fetch-model
       - run: npm test
       - name: check tag matches package.json
         run: |
