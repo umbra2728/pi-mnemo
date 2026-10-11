@@ -17,10 +17,11 @@
   },
   "scripts": {
     "test": "node --experimental-strip-types --no-warnings --test test/*.test.ts",
-    "fetch-model": "node --experimental-strip-types --no-warnings scripts/fetch-model.mjs"
+    "fetch-model": "node bin/pi-mnemo.mjs fetch-model"
   },
   "dependencies": {
-    "snowball-stemmers": "0.6.0"
+    "snowball-stemmers": "0.6.0",
+    "jiti": "^2.7.0"
   },
   "license": "MIT",
   "repository": {
@@ -30,11 +31,15 @@
   "homepage": "https://github.com/umbra2728/pi-mnemo#readme",
   "files": [
     "src/",
-    "scripts/fetch-model.mjs",
+    "scripts/admin.ts",
+    "bin/",
     "README.md",
     "LICENSE"
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "bin": {
+    "pi-mnemo": "bin/pi-mnemo.mjs"
   }
 }

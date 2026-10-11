@@ -25,9 +25,7 @@ On the first interactive start pi downloads the search model (~55 MB) in the bac
 
 `/mnemo stats | search <q> | show <id> | forget <id> | import-hermes [enrichment.json] | backfill | enrich`
 
-Offline helpers from a checkout: `node --experimental-strip-types scripts/admin.ts stats | search <q> | backfill | import-hermes`.
-
-Model download by hand (optional, for CI or offline setups): `npm run fetch-model`.
+CLI (works from the installed package too): `npx pi-mnemo fetch-model | import-hermes | backfill | search <q> | stats`. Inside pi's package directory: `node ~/.pi/agent/npm/node_modules/pi-mnemo/bin/pi-mnemo.mjs <command>`.
 
 ## Environment
 
