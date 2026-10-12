@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
-import { autoRecall, passesGate } from "../src/recall.ts";
+import { autoRecall, parseRecallItems, passesGate, renderRecall } from "../src/recall.ts";
 import { buildSlice, entriesAfter } from "../src/session.ts";
 import { Store } from "../src/store.ts";
 import { isTrivialPrompt, redact } from "../src/text.ts";
@@ -28,6 +28,20 @@ describe("text", () => {
     assert.ok(!out.includes("abcdefghijklmnop"));
     assert.ok(!out.includes("hunter2hunter"));
     assert.ok(!out.includes("pa55word"));
+  });
+});
+
+describe("recall display", () => {
+  it("parses legacy recall blocks back into items", () => {
+    const base = { kind: "pitfall", updatedAt: Date.UTC(2026, 8, 30), score: 1, cos: 1, ftsRank: 1 };
+    const block = renderRecall([
+      { ...base, id: 416, scope: "project", project: "pi-mnemo", text: "bun install\nrewrites the lockfile" },
+      { ...base, id: 7, kind: "fact", scope: "global", project: null, text: "Caddy fronts the LXC (port 443)." },
+    ] as never);
+    assert.deepEqual(parseRecallItems(block), [
+      { id: 416, kind: "pitfall", date: "2026-09-30", project: "pi-mnemo", text: "bun install rewrites the lockfile" },
+      { id: 7, kind: "fact", date: "2026-09-30", project: null, text: "Caddy fronts the LXC (port 443)." },
+    ]);
   });
 });
 

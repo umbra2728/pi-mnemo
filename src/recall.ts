@@ -33,6 +33,27 @@ export function formatMemoryLine(m: MemoryHit | { id: number; kind: string; upda
   return `- #${m.id} (${date(m.updatedAt)}, ${m.kind}${where}): ${short(m.text, max)}`;
 }
 
+export interface RecallItem {
+  id: number;
+  kind: string;
+  date: string;
+  project: string | null;
+  text: string;
+}
+
+export function toRecallItem(m: MemoryHit): RecallItem {
+  return { id: m.id, kind: m.kind, date: date(m.updatedAt), project: m.scope === "project" ? m.project : null, text: m.text.slice(0, 1800) };
+}
+
+const MEMORY_LINE = /^- #(\d+) \((\d{4}-\d{2}-\d{2}), ([\w-]+)(?:, ([^)]*))?\): (.*)$/;
+
+export function parseRecallItems(content: string): RecallItem[] {
+  return content.split("\n").flatMap((line) => {
+    const m = MEMORY_LINE.exec(line.trim());
+    return m ? [{ id: Number(m[1]), kind: m[3], date: m[2], project: m[4] ?? null, text: m[5] }] : [];
+  });
+}
+
 export function autoRecall(store: Store, prompt: string, opts: { project: string | null; seen: Set<number> }): MemoryHit[] {
   if (isTrivialPrompt(prompt)) return [];
   const hits = store.searchMemories([recallQueryFromPrompt(prompt)], { project: opts.project, limit: 8, excludeIds: opts.seen });

@@ -2,12 +2,12 @@ import os from "node:os";
 import path from "node:path";
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Box, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { enqueueBackfill, enqueueEnrichAll, importHermes } from "./importer.ts";
 import { JobRunner } from "./jobs.ts";
 import { projectFor } from "./project.ts";
-import { autoRecall, date, errorHint, formatMemoryLine, renderRecall } from "./recall.ts";
+import { autoRecall, date, errorHint, formatMemoryLine, parseRecallItems, renderRecall, toRecallItem, type RecallItem } from "./recall.ts";
+import { recallView } from "./render.ts";
 import { ensureModel, modelReady } from "./model.ts";
 import { KINDS, Store, type Kind } from "./store.ts";
 import { redact } from "./text.ts";
@@ -164,7 +164,7 @@ export default function mnemo(pi: ExtensionAPI) {
     if (!hits.length) return;
     for (const h of hits) seen.add(h.id);
     safe(() => getStore().noteHits(hits.map((h) => h.id)), undefined);
-    return { message: { customType: "mnemo-recall", content: renderRecall(hits), display: true, details: { ids: hits.map((h) => h.id) } } };
+    return { message: { customType: "mnemo-recall", content: renderRecall(hits), display: true, details: { ids: hits.map((h) => h.id), items: hits.map(toRecallItem) } } };
   });
 
   pi.on("turn_end", async (event) => {
@@ -188,6 +188,7 @@ export default function mnemo(pi: ExtensionAPI) {
     seen.add(hit.id);
     toolsSinceHint = 0;
     safe(() => getStore().noteHits([hit.id]), undefined);
+    safe(() => pi.appendEntry("mnemo-hint", { items: [toRecallItem(hit)] }), undefined);
     return {
       content: [...event.content, { type: "text" as const, text: `\n[mnemo] Similar issue seen before:\n${formatMemoryLine(hit, 600)}` }],
       structuredContent: event.structuredContent,
@@ -195,11 +196,14 @@ export default function mnemo(pi: ExtensionAPI) {
   });
 
   pi.registerMessageRenderer("mnemo-recall", (message, { expanded, outputPad }, theme) => {
-    const ids = ((message.details as { ids?: number[] } | undefined)?.ids ?? []).map((id) => `#${id}`).join(" · ");
-    const body = expanded ? `\n${theme.fg("dim", String(message.content))}` : "";
-    const box = new Box(outputPad, 0, (t: string) => t);
-    box.addChild(new Text(`${theme.fg("dim", `🧠 memory ${ids}`)}${body}`, 0, 0));
-    return box;
+    const items = (message.details as { items?: RecallItem[] } | undefined)?.items ?? parseRecallItems(typeof message.content === "string" ? message.content : message.content.map((c) => (c.type === "text" ? c.text : "")).join("\n"));
+    return recallView(`recall:${message.timestamp}`, "memory", items, expanded, theme, outputPad);
+  });
+
+  pi.registerEntryRenderer("mnemo-hint", (entry, { expanded }, theme) => {
+    const items = (entry.data as { items?: RecallItem[] } | undefined)?.items ?? [];
+    if (!items.length) return undefined;
+    return recallView(`hint:${entry.id}`, "similar issue seen before", items, expanded, theme, 1);
   });
 
   pi.registerTool({
