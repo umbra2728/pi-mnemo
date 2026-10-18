@@ -7,6 +7,7 @@ export interface SessionEntry {
   timestamp?: string;
   cwd?: string;
   customType?: string;
+  data?: unknown;
   message?: {
     role: string;
     content?: unknown;
@@ -43,6 +44,28 @@ export function readEntries(file: string): SessionEntry[] {
     try {
       out.push(JSON.parse(line));
     } catch {}
+  }
+  return withoutPaused(out);
+}
+
+export const STATE_ENTRY = "mnemo-state";
+
+export function stateOf(entry: SessionEntry): boolean | undefined {
+  if (entry.type !== "custom" || entry.customType !== STATE_ENTRY) return undefined;
+  const enabled = (entry.data as { enabled?: unknown } | undefined)?.enabled;
+  return typeof enabled === "boolean" ? enabled : undefined;
+}
+
+export function withoutPaused(entries: SessionEntry[]): SessionEntry[] {
+  const out: SessionEntry[] = [];
+  let paused = false;
+  for (const e of entries) {
+    const state = stateOf(e);
+    if (state !== undefined) {
+      paused = !state;
+      continue;
+    }
+    if (!paused) out.push(e);
   }
   return out;
 }

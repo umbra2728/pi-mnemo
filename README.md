@@ -23,7 +23,9 @@ On the first interactive start pi downloads the search model (~55 MB) in the bac
 
 ## Commands
 
-`/mnemo stats | search <q> | show <id> | forget <id> | import-hermes [enrichment.json] | backfill | enrich`
+`/mnemo off | on | stats | search <q> | show <id> | forget <id> | import-hermes [enrichment.json] | backfill | enrich`
+
+`/mnemo off` pauses memory for the current session: no auto-recall, no error hints, `recall`/`remember` are removed from the active tools, and everything recorded while paused is skipped by checkpoints, digests and backfill. The state is saved in the session and restored on resume; `/mnemo on` resumes.
 
 CLI (works from the installed package too): `npx pi-mnemo fetch-model | import-hermes | backfill | search <q> | stats`. Inside pi's package directory: `node ~/.pi/agent/npm/node_modules/pi-mnemo/bin/pi-mnemo.mjs <command>`.
 

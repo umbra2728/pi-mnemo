@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
 import { autoRecall, parseRecallItems, passesGate, renderRecall } from "../src/recall.ts";
-import { buildSlice, entriesAfter } from "../src/session.ts";
+import { buildSlice, entriesAfter, withoutPaused } from "../src/session.ts";
 import { Store } from "../src/store.ts";
 import { isTrivialPrompt, redact } from "../src/text.ts";
 import { applyOps } from "../src/writer.ts";
@@ -28,6 +28,15 @@ describe("text", () => {
     assert.ok(!out.includes("abcdefghijklmnop"));
     assert.ok(!out.includes("hunter2hunter"));
     assert.ok(!out.includes("pa55word"));
+  });
+});
+
+describe("session pause", () => {
+  it("drops entries recorded while memory was off", () => {
+    const msg = (id: string) => ({ type: "message", id, message: { role: "user", content: id } });
+    const state = (id: string, enabled: boolean) => ({ type: "custom", id, customType: "mnemo-state", data: { enabled } });
+    const kept = withoutPaused([msg("a"), state("s1", false), msg("b"), msg("c"), state("s2", true), msg("d"), state("s3", false), msg("e")]);
+    assert.deepEqual(kept.map((e) => e.id), ["a", "d"]);
   });
 });
 

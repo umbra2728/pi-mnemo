@@ -10,6 +10,7 @@ import { autoRecall, date, errorHint, formatMemoryLine, parseRecallItems, render
 import { recallView } from "./render.ts";
 import { ensureModel, modelReady } from "./model.ts";
 import { KINDS, Store, type Kind } from "./store.ts";
+import { STATE_ENTRY, stateOf, type SessionEntry } from "./session.ts";
 import { redact } from "./text.ts";
 
 const ROOT = process.env.MNEMO_DIR ?? path.join(os.homedir(), ".pi/agent/mnemo");
@@ -66,6 +67,22 @@ export default function mnemo(pi: ExtensionAPI) {
   let lastCheckpointAt = 0;
   let toolsSinceHint = HINT_SPACING;
   let lastError: string | undefined;
+  let enabled = true;
+  let hiddenTools: string[] = [];
+
+  const applyEnabled = (ctx: ExtensionContext) => {
+    const active = pi.getActiveTools();
+    if (!enabled) {
+      hiddenTools = [...new Set([...hiddenTools, ...active.filter((name) => OWN_TOOLS.has(name))])];
+      pi.setActiveTools(active.filter((name) => !OWN_TOOLS.has(name)));
+    } else if (hiddenTools.length) {
+      pi.setActiveTools([...new Set([...active, ...hiddenTools])]);
+      hiddenTools = [];
+    }
+    try {
+      if (ctx.hasUI) ctx.ui.setStatus("mnemo", enabled ? undefined : "memory off");
+    } catch {}
+  };
 
   const getStore = (): Store => {
     if (!store) store = new Store(DB_PATH, MODEL_DIR);
@@ -82,7 +99,7 @@ export default function mnemo(pi: ExtensionAPI) {
   };
 
   const enqueueCheckpoint = (delayMs: number) => {
-    if (IS_CHILD || !sessionId || !sessionFile) return;
+    if (IS_CHILD || !enabled || !sessionId || !sessionFile) return;
     safe(() => {
       const s = getStore();
       s.upsertSession({ id: sessionId!, file: sessionFile!, cwd: null, project });
@@ -133,6 +150,8 @@ export default function mnemo(pi: ExtensionAPI) {
     toolCallsSince = 0;
     charsSince = 0;
     toolsSinceHint = HINT_SPACING;
+    enabled = ctx.sessionManager.getBranch().reduce<boolean>((acc, e) => stateOf(e as SessionEntry) ?? acc, true);
+    applyEnabled(ctx);
     if (sessionFile) safe(() => getStore().upsertSession({ id: sessionId!, file: sessionFile!, cwd: ctx.cwd, project, startedAt: Date.now() }), undefined);
     if (!IS_CHILD) provisionModel(ctx);
     runner?.stop();
@@ -160,6 +179,7 @@ export default function mnemo(pi: ExtensionAPI) {
   });
 
   pi.on("before_agent_start", async (event) => {
+    if (!enabled) return;
     const hits = safe(() => autoRecall(getStore(), event.prompt, { project, seen }), []);
     if (!hits.length) return;
     for (const h of hits) seen.add(h.id);
@@ -181,7 +201,7 @@ export default function mnemo(pi: ExtensionAPI) {
 
   pi.on("tool_result", async (event) => {
     toolsSinceHint++;
-    if (!event.isError || OWN_TOOLS.has(event.toolName) || toolsSinceHint < HINT_SPACING) return;
+    if (!enabled || !event.isError || OWN_TOOLS.has(event.toolName) || toolsSinceHint < HINT_SPACING) return;
     const errorText = event.content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
     const hit = safe(() => errorHint(getStore(), event.toolName, event.input, errorText, { project, seen }), undefined);
     if (!hit) return;
@@ -290,12 +310,25 @@ export default function mnemo(pi: ExtensionAPI) {
   });
 
   pi.registerCommand("mnemo", {
-    description: "Long-term memory: stats | search <q> | show <id> | forget <id> | import-hermes | backfill | enrich",
+    description: "Long-term memory: off | on | stats | search <q> | show <id> | forget <id> | import-hermes | backfill | enrich",
     handler: async (args, ctx) => {
       const [cmd, ...rest] = args.trim().split(/\s+/);
       const arg = rest.join(" ");
-      const s = getStore();
       const say = (text: string) => ctx.ui.notify(text, "info");
+      if (cmd === "off" || cmd === "on") {
+        const next = cmd === "on";
+        if (next === enabled) return say(`mnemo: memory already ${cmd} in this session`);
+        if (!next) enqueueCheckpoint(0);
+        pi.appendEntry(STATE_ENTRY, { enabled: next });
+        enabled = next;
+        applyEnabled(ctx);
+        return say(
+          next
+            ? "mnemo: memory on — auto-recall, hints, recall/remember and extraction resumed (the paused part stays excluded)"
+            : "mnemo: memory off for this session — no auto-recall, no hints, no recall/remember tools, nothing from now on is extracted",
+        );
+      }
+      const s = getStore();
       if (!cmd || cmd === "stats") {
         const c = s.countMemories();
         const sessions = s.db.prepare("SELECT COUNT(*) n, SUM(digested_at IS NOT NULL) d FROM sessions").get() as { n: number; d: number };
@@ -304,6 +337,7 @@ export default function mnemo(pi: ExtensionAPI) {
             `memories: ${c.active} active / ${c.total} total (${c.unenriched} awaiting tags)`,
             `sessions: ${sessions.n} known, ${sessions.d ?? 0} digested`,
             `jobs: ${JSON.stringify(s.jobStats())}`,
+            `session memory: ${enabled ? "on" : "off"}`,
             `project: ${project ?? "(home)"}  model: ${s.embedder ? "static embeddings" : "MISSING (run npm run fetch-model)"}`,
             runner?.lastResult ? `last job: ${runner.lastResult}` : "",
             runner?.lastError || lastError ? `last error: ${runner?.lastError ?? lastError}` : "",
@@ -333,7 +367,7 @@ export default function mnemo(pi: ExtensionAPI) {
         runner?.kick();
         say(`queued ${missing} memories for tagging`);
       } else {
-        say("usage: /mnemo stats | search <q> | show <id> | forget <id> | import-hermes [enrichment.json] | backfill | enrich");
+        say("usage: /mnemo off | on | stats | search <q> | show <id> | forget <id> | import-hermes [enrichment.json] | backfill | enrich");
       }
     },
   });
