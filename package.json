@@ -1,6 +1,6 @@
 {
   "name": "pi-mnemo",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Token-frugal long-term memory for pi: hybrid FTS + static embeddings, background extraction, auto-recall.",
   "type": "module",
   "keywords": [
